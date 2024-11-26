@@ -3,64 +3,68 @@ pragma solidity 0.8.25;
 
 import {console2} from "lib/forge-std/src/console2.sol";
 import {
-    Counter,
-    OptimismGoerliParameters,
+    Conversion,
     OptimismParameters,
-    Setup
+    Setup,
+    DeployOptimism
 } from "script/Deploy.s.sol";
 import {Test} from "lib/forge-std/src/Test.sol";
+import {MockToken} from "test/utils/MockToken.sol";
+import {Constants} from "./Constants.sol";
+import {IERC20} from
+    "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
-contract Bootstrap is Test {
+contract Bootstrap is Test, Constants {
     using console2 for *;
 
-    Counter internal counter;
+    /// @dev for testing
+    event KWENTALocked(address indexed from, uint256 value);
+    event SNXVested(address indexed from, address indexed to, uint256 value);
+
+    Conversion internal conversion;
+    MockToken internal KWENTAMock;
+    MockToken internal SNXMock;
+    IERC20 internal KWENTA;
+    IERC20 internal SNX;
+    BootstrapLocal internal bootstrapLocal;
+    BootstrapOptimism internal bootstrapOptimism;
 
     function initializeLocal() internal {
-        BootstrapLocal bootstrap = new BootstrapLocal();
-        (address counterAddress) = bootstrap.init();
-
-        counter = Counter(counterAddress);
-    }
-
-    function initializeOptimismGoerli() internal {
-        BootstrapOptimismGoerli bootstrap = new BootstrapOptimismGoerli();
-        (address counterAddress) = bootstrap.init();
-
-        counter = Counter(counterAddress);
+        KWENTAMock = new MockToken();
+        SNXMock = new MockToken();
+        bootstrapLocal = new BootstrapLocal();
+        (address conversionAddress) =
+            bootstrapLocal.init(address(KWENTAMock), address(SNXMock));
+        SNXMock.transfer(conversionAddress, MINT_AMOUNT);
+        conversion = Conversion(conversionAddress);
     }
 
     function initializeOptimism() internal {
-        BootstrapOptimismGoerli bootstrap = new BootstrapOptimismGoerli();
-        (address counterAddress) = bootstrap.init();
+        vm.rollFork(OPTIMISM_BLOCK_NUMBER);
+        bootstrapOptimism = new BootstrapOptimism();
+        (address conversionAddress, address kwenta, address snx) =
+            bootstrapOptimism.init();
 
-        counter = Counter(counterAddress);
+        conversion = Conversion(conversionAddress);
+        KWENTA = IERC20(kwenta);
+        SNX = IERC20(snx);
+        vm.prank(LARGEST_SNX_HOLDER);
+        SNX.transfer(conversionAddress, MINT_AMOUNT);
     }
-
-    /// @dev add other networks here as needed (ex: Base, BaseGoerli)
 }
 
 contract BootstrapLocal is Setup {
-    function init() public returns (address) {
-        address counterAddress = Setup.deploySystem();
+    function init(address _kwenta, address _snx) public returns (address) {
+        address conversionAddress = Setup.deploySystem(_kwenta, _snx);
 
-        return counterAddress;
+        return conversionAddress;
     }
 }
 
-contract BootstrapOptimism is Setup, OptimismParameters {
-    function init() public returns (address) {
-        address counterAddress = Setup.deploySystem();
+contract BootstrapOptimism is DeployOptimism {
+    function init() public returns (address, address, address) {
+        address conversionAddress = DeployOptimism.run();
 
-        return counterAddress;
+        return (conversionAddress, OPTIMISM_KWENTA, OPTIMISM_SNX);
     }
 }
-
-contract BootstrapOptimismGoerli is Setup, OptimismGoerliParameters {
-    function init() public returns (address) {
-        address counterAddress = Setup.deploySystem();
-
-        return counterAddress;
-    }
-}
-
-// add other networks here as needed (ex: Base, BaseGoerli)
