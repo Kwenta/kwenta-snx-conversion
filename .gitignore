@@ -13,3 +13,5 @@ out/
 # Other
 .vscode
 .idea
+
+lib/
